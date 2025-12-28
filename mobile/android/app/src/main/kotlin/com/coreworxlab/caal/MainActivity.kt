@@ -1,4 +1,4 @@
-package com.livekit.example.VoiceAssistantFlutter
+package com.coreworxlab.caal
 
 import io.flutter.embedding.android.FlutterActivity
 

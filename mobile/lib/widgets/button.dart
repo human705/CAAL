@@ -18,13 +18,13 @@ class Button extends StatelessWidget {
         onPressed: isProgressing ? null : onPressed,
         style: TextButton.styleFrom(
           backgroundColor: Theme.of(ctx).buttonTheme.colorScheme?.surface,
-          foregroundColor: Colors.white,
+          foregroundColor: const Color(0xFF171717),  // Dark text to match web frontend
           // surfaceTintColor: Colors.white,
-          disabledForegroundColor: Colors.white,
+          disabledForegroundColor: const Color(0xFF171717),
           // disabledIconColor: Colors.white,
           padding: const EdgeInsets.symmetric(horizontal: 50, vertical: 15),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(30),  // More rounded to match web frontend
           ),
         ),
         child: Row(
@@ -37,7 +37,7 @@ class Button extends StatelessWidget {
                 height: 20,
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation(Colors.white),
+                  valueColor: const AlwaysStoppedAnimation(Color(0xFF171717)),
                 ),
               ),
             Text(

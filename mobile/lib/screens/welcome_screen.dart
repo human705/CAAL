@@ -18,45 +18,20 @@ class WelcomeScreen extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               spacing: 30,
               children: [
-                // CAAL Logo - using mic icon as placeholder
+                // Audio waveform icon to match web frontend
                 Icon(
-                  Icons.record_voice_over,
+                  Icons.graphic_eq,
                   size: 80,
-                  color: Theme.brightnessOf(ctx) == Brightness.light ? Colors.black : Colors.white,
+                  color: Colors.white,
                 ),
-                Text(
-                  'CAAL',
+                const SizedBox(height: 16),
+                const Text(
+                  'Chat live with your voice AI agent',
                   style: TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.bold,
-                    color: Theme.brightnessOf(ctx) == Brightness.light ? Colors.black : Colors.white,
+                    fontSize: 18,
+                    color: Colors.white,
                   ),
-                ),
-                Text.rich(
                   textAlign: TextAlign.center,
-                  TextSpan(
-                    children: [
-                      const TextSpan(
-                        text: 'Start a call to chat with CAAL. Learn more at ',
-                      ),
-                      TextSpan(
-                        text: 'GitHub',
-                        style: const TextStyle(
-                          color: Colors.blue,
-                          decoration: TextDecoration.underline,
-                          decorationColor: Colors.blue,
-                          decorationThickness: 1,
-                        ),
-                        recognizer: TapGestureRecognizer()
-                          ..onTap = () async {
-                            await launchUrl(Uri.parse('https://github.com/CoreWorxLab/CAAL'));
-                          },
-                      ),
-                      const TextSpan(
-                        text: '.',
-                      ),
-                    ],
-                  ),
                 ),
                 // Agent listening indicator
                 Consumer<sdk.Session>(
@@ -91,7 +66,7 @@ class WelcomeScreen extends StatelessWidget {
                     final isProgressing =
                         appCtrl.isSessionStarting || session.connectionState != sdk.ConnectionState.disconnected;
                     return buttons.Button(
-                      text: isProgressing ? 'Connecting' : 'Start call',
+                      text: isProgressing ? 'Connecting' : 'Talk to CAAL',
                       isProgressing: isProgressing,
                       onPressed: () => appCtrl.connect(),
                     );

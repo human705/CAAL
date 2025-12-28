@@ -21,26 +21,28 @@ class AppCtrl extends ChangeNotifier {
   AppScreenState appScreenState = AppScreenState.welcome;
   AgentScreenState agentScreenState = AgentScreenState.visualizer;
 
-  //Test
   bool isUserCameEnabled = false;
   bool isScreenshareEnabled = false;
 
   final messageCtrl = TextEditingController();
   final messageFocusNode = FocusNode();
 
+  // Session objects - created once, reused across connect/disconnect
   late final sdk.Room room = sdk.Room(roomOptions: const sdk.RoomOptions(enableVisualizer: true));
   late final roomContext = components.RoomContext(room: room);
-  late final sdk.Session session = _createSession(room: room);
+  late final sdk.Session session = _createSession();
 
-  static sdk.Session _createSession({required sdk.Room room}) {
-    // Get CAAL server URL from environment
-    final caalServerUrl = dotenv.env['CAAL_SERVER_URL']?.replaceAll('"', '');
-    if (caalServerUrl == null || caalServerUrl.isEmpty) {
+  static String get _caalServerUrl {
+    final url = dotenv.env['CAAL_SERVER_URL']?.replaceAll('"', '');
+    if (url == null || url.isEmpty) {
       throw StateError('CAAL_SERVER_URL is not set in .env');
     }
+    return url;
+  }
 
+  sdk.Session _createSession() {
     return sdk.Session.fromConfigurableTokenSource(
-      CaalTokenSource(baseUrl: caalServerUrl).cached(),
+      createCaalTokenSource(_caalServerUrl).cached(),
       options: sdk.SessionOptions(room: room),
     );
   }
@@ -51,7 +53,6 @@ class AppCtrl extends ChangeNotifier {
 
   AppCtrl() {
     final format = DateFormat('HH:mm:ss');
-    // configure logs for debugging
     Logger.root.level = Level.FINE;
     Logger.root.onRecord.listen((record) {
       debugPrint('${format.format(record.time)}: ${record.message}');
@@ -68,7 +69,7 @@ class AppCtrl extends ChangeNotifier {
     session.addListener(_handleSessionChange);
   }
 
-  Future<void> cleanUp() async {
+  Future<void> _cleanUp() async {
     if (_hasCleanedUp) return;
     _hasCleanedUp = true;
 
@@ -82,7 +83,7 @@ class AppCtrl extends ChangeNotifier {
 
   @override
   void dispose() {
-    unawaited(cleanUp());
+    unawaited(_cleanUp());
     super.dispose();
   }
 

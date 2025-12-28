@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:livekit_client/livekit_client.dart' as sdk;
 import 'package:livekit_components/livekit_components.dart' as components;
 import 'package:provider/provider.dart';
 
@@ -32,7 +33,7 @@ class CaalApp extends StatelessWidget {
         colorScheme: ColorScheme.dark(
           primary: Colors.white,
           secondary: Colors.white,
-          surface: colorPallete.fgAccent,
+          surface: const Color(0xFF45997C),  // Teal/green to match web frontend
         ),
       ),
       colorScheme: isLight
@@ -44,7 +45,7 @@ class CaalApp extends StatelessWidget {
           : const ColorScheme.dark(
               primary: Colors.white,
               secondary: Colors.white,
-              surface: Colors.black,
+              surface: const Color(0xFF1A1A1A),  // Dark gray to match web frontend
             ),
       textTheme: const TextTheme(
         bodyMedium: TextStyle(
@@ -59,8 +60,8 @@ class CaalApp extends StatelessWidget {
   Widget build(BuildContext ctx) => MultiProvider(
         providers: [
           ChangeNotifierProvider.value(value: appCtrl),
-          ChangeNotifierProvider.value(value: appCtrl.session),
-          ChangeNotifierProvider.value(value: appCtrl.roomContext),
+          ChangeNotifierProvider<sdk.Session>.value(value: appCtrl.session),
+          ChangeNotifierProvider<components.RoomContext>.value(value: appCtrl.roomContext),
         ],
         child: components.SessionContext(
           session: appCtrl.session,
@@ -68,7 +69,7 @@ class CaalApp extends StatelessWidget {
             title: 'CAAL',
             theme: buildTheme(isLight: true),
             darkTheme: buildTheme(isLight: false),
-            // themeMode: ThemeMode.dark,
+            themeMode: ThemeMode.dark,
             home: Builder(
               builder: (ctx) => Center(
                 child: Container(
