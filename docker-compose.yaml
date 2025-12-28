@@ -78,6 +78,8 @@ services:
       - KOKORO_URL=http://kokoro:8880
     volumes:
       - caal-memory:/app/data
+      - ./settings.json:/app/settings.json  # Runtime settings (created on first save)
+      - ./prompt:/app/prompt  # Prompt files (custom.md is gitignored)
     networks:
       - caal-network
     depends_on:

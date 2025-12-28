@@ -10,6 +10,7 @@ import { TrackToggle } from '@/components/livekit/agent-control-bar/track-toggle
 import { WakeWordToggle } from '@/components/livekit/agent-control-bar/wake-word-toggle';
 import { Button } from '@/components/livekit/button';
 import { Toggle } from '@/components/livekit/toggle';
+import { SettingsButton } from '@/components/settings/settings-button';
 import { useWakeWordMicControl } from '@/hooks/useWakeWordMicControl';
 import { cn } from '@/lib/utils';
 import { ChatInput } from './chat-input';
@@ -161,6 +162,9 @@ export function AgentControlBar({
           >
             <ChatTextIcon weight="bold" />
           </Toggle>
+
+          {/* Settings Button */}
+          <SettingsButton />
 
           {/* Reload Tools Button */}
           <ReloadToolsButton />

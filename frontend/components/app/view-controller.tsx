@@ -35,20 +35,22 @@ export function ViewController({ appConfig }: ViewControllerProps) {
   const { isConnected, start } = useSessionContext();
 
   return (
-    <AnimatePresence mode="wait">
-      {/* Welcome view */}
-      {!isConnected && (
-        <MotionWelcomeView
-          key="welcome"
-          {...VIEW_MOTION_PROPS}
-          startButtonText={appConfig.startButtonText}
-          onStartCall={start}
-        />
-      )}
-      {/* Session view */}
-      {isConnected && (
-        <MotionSessionView key="session-view" {...VIEW_MOTION_PROPS} appConfig={appConfig} />
-      )}
-    </AnimatePresence>
+    <>
+      <AnimatePresence mode="wait">
+        {/* Welcome view */}
+        {!isConnected && (
+          <MotionWelcomeView
+            key="welcome"
+            {...VIEW_MOTION_PROPS}
+            startButtonText={appConfig.startButtonText}
+            onStartCall={start}
+          />
+        )}
+        {/* Session view */}
+        {isConnected && (
+          <MotionSessionView key="session-view" {...VIEW_MOTION_PROPS} appConfig={appConfig} />
+        )}
+      </AnimatePresence>
+    </>
   );
 }

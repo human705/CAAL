@@ -1,13 +1,19 @@
-"""Webhook server for external triggers (announcements, tool reload, wake word).
+"""Webhook server for external triggers (announcements, tool reload, wake word, settings).
 
 This module provides HTTP endpoints that allow external systems (like n8n)
-to trigger actions on the running voice agent.
+and the frontend to trigger actions on the running voice agent.
 
 Endpoints:
     POST /announce      - Make the agent speak a message
     POST /reload-tools  - Refresh MCP tool cache and optionally announce
     POST /wake          - Handle wake word detection (greet user)
     GET  /health        - Health check
+    GET  /settings      - Get current settings
+    POST /settings      - Update settings
+    GET  /prompt        - Get current prompt content
+    POST /prompt        - Save custom prompt
+    GET  /voices        - List available TTS voices
+    GET  /models        - List available LLM models
 
 Usage:
     # Start in a background thread from voice_agent.py:
@@ -25,21 +31,15 @@ Usage:
 from __future__ import annotations
 
 import logging
+import os
 import random
 
+import httpx
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-# Wake word greetings - randomly selected for variety
-WAKE_GREETINGS = [
-    "Hey, what's up?",
-    "Hi there!",
-    "Yeah?",
-    "What can I do for you?",
-    "Hey!",
-    "Yo!",
-    "What's up?",
-]
+from . import settings as settings_module
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +47,15 @@ app = FastAPI(
     title="CAAL Webhook API",
     description="External triggers for CAAL voice agent",
     version="1.0.0",
+)
+
+# Add CORS middleware for frontend access
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Frontend can be on different port
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
@@ -230,7 +239,8 @@ async def wake(req: WakeRequest) -> WakeResponse:
     logger.info(f"Wake word detected in room {req.room_name}")
 
     # Say a random greeting directly (bypasses LLM for instant response)
-    greeting = random.choice(WAKE_GREETINGS)
+    greetings = settings_module.get_setting("wake_greetings")
+    greeting = random.choice(greetings)
     await session.say(greeting)
 
     return WakeResponse(status="greeted", room_name=req.room_name)
@@ -249,3 +259,206 @@ async def health() -> HealthResponse:
         status="ok",
         active_sessions=session_registry.list_rooms(),
     )
+
+
+# =============================================================================
+# Settings Endpoints
+# =============================================================================
+
+
+class SettingsResponse(BaseModel):
+    """Response body for /settings endpoint."""
+
+    settings: dict
+    prompt_content: str
+    custom_prompt_exists: bool
+
+
+class SettingsUpdateRequest(BaseModel):
+    """Request body for POST /settings endpoint."""
+
+    settings: dict
+
+
+class PromptResponse(BaseModel):
+    """Response body for /prompt endpoint."""
+
+    prompt: str  # "default" or "custom"
+    content: str
+    is_custom: bool
+
+
+class PromptUpdateRequest(BaseModel):
+    """Request body for POST /prompt endpoint."""
+
+    content: str
+
+
+class VoicesResponse(BaseModel):
+    """Response body for /voices endpoint."""
+
+    voices: list[str]
+
+
+class ModelsResponse(BaseModel):
+    """Response body for /models endpoint."""
+
+    models: list[str]
+
+
+@app.get("/settings", response_model=SettingsResponse)
+async def get_settings() -> SettingsResponse:
+    """Get current settings and prompt content.
+
+    Returns:
+        SettingsResponse with current settings, prompt content, and custom prompt status
+    """
+    settings = settings_module.load_settings()
+    prompt_content = settings_module.load_prompt_content()
+    custom_exists = settings_module.custom_prompt_exists()
+
+    return SettingsResponse(
+        settings=settings,
+        prompt_content=prompt_content,
+        custom_prompt_exists=custom_exists,
+    )
+
+
+@app.post("/settings", response_model=SettingsResponse)
+async def update_settings(req: SettingsUpdateRequest) -> SettingsResponse:
+    """Update settings.
+
+    Args:
+        req: SettingsUpdateRequest with settings dict to merge
+
+    Returns:
+        SettingsResponse with updated settings
+    """
+    # Load current settings
+    current = settings_module.load_settings()
+
+    # Merge with new settings (only known keys)
+    for key, value in req.settings.items():
+        if key in settings_module.DEFAULT_SETTINGS:
+            current[key] = value
+
+    # Save merged settings
+    settings_module.save_settings(current)
+
+    # Reload and return
+    settings = settings_module.reload_settings()
+    prompt_content = settings_module.load_prompt_content()
+    custom_exists = settings_module.custom_prompt_exists()
+
+    logger.info(f"Settings updated: {list(req.settings.keys())}")
+
+    return SettingsResponse(
+        settings=settings,
+        prompt_content=prompt_content,
+        custom_prompt_exists=custom_exists,
+    )
+
+
+@app.get("/prompt", response_model=PromptResponse)
+async def get_prompt() -> PromptResponse:
+    """Get current prompt content.
+
+    Returns:
+        PromptResponse with prompt name and content
+    """
+    prompt_name = settings_module.get_setting("prompt", "default")
+    content = settings_module.load_prompt_content(prompt_name)
+    is_custom = prompt_name == "custom" and settings_module.custom_prompt_exists()
+
+    return PromptResponse(
+        prompt=prompt_name,
+        content=content,
+        is_custom=is_custom,
+    )
+
+
+@app.post("/prompt", response_model=PromptResponse)
+async def save_prompt(req: PromptUpdateRequest) -> PromptResponse:
+    """Save custom prompt content.
+
+    Args:
+        req: PromptUpdateRequest with content to save
+
+    Returns:
+        PromptResponse with saved prompt info
+    """
+    # Save to custom.md
+    settings_module.save_custom_prompt(req.content)
+
+    # Update settings to use custom prompt
+    current = settings_module.load_settings()
+    current["prompt"] = "custom"
+    settings_module.save_settings(current)
+
+    logger.info("Custom prompt saved and activated")
+
+    return PromptResponse(
+        prompt="custom",
+        content=req.content,
+        is_custom=True,
+    )
+
+
+@app.get("/voices", response_model=VoicesResponse)
+async def get_voices() -> VoicesResponse:
+    """Get available TTS voices from Kokoro.
+
+    Returns:
+        VoicesResponse with list of voice IDs
+    """
+    kokoro_url = os.getenv("KOKORO_URL", "http://kokoro:8880")
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{kokoro_url}/v1/audio/voices",
+                timeout=10.0,
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            # Kokoro returns {"voices": [{"id": "...", ...}, ...]}
+            voices = [v.get("id") or v.get("voice_id") for v in data.get("voices", [])]
+            voices = [v for v in voices if v]  # Filter None values
+
+            return VoicesResponse(voices=voices)
+    except Exception as e:
+        logger.warning(f"Failed to fetch voices from Kokoro: {e}")
+        # Return default voices as fallback
+        return VoicesResponse(
+            voices=["af_heart", "af_bella", "af_sarah", "am_adam", "am_puck"]
+        )
+
+
+@app.get("/models", response_model=ModelsResponse)
+async def get_models() -> ModelsResponse:
+    """Get available LLM models from Ollama.
+
+    Returns:
+        ModelsResponse with list of model names
+    """
+    ollama_host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{ollama_host}/api/tags",
+                timeout=10.0,
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            # Ollama returns {"models": [{"name": "...", ...}, ...]}
+            models = [m.get("name") for m in data.get("models", [])]
+            models = [m for m in models if m]  # Filter None values
+
+            return ModelsResponse(models=models)
+    except Exception as e:
+        logger.warning(f"Failed to fetch models from Ollama: {e}")
+        # Return empty list on failure
+        return ModelsResponse(models=[])

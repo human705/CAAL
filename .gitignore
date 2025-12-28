@@ -44,13 +44,17 @@ TODO.md
 .env.*.local
 n8n-workflows/config.env
 
+# Runtime settings (user-specific)
+settings.json
+prompt/custom.md
+
 # Models (large files - download separately)
 *.onnx
 *.onnx.json
 *.bin
 *.pt
 *.pth
-models/
+/models/
 
 # Logs
 *.log

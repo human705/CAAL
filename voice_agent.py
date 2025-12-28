@@ -29,8 +29,6 @@ import logging
 import os
 import sys
 import time
-from datetime import datetime
-from zoneinfo import ZoneInfo
 
 import requests
 
@@ -55,10 +53,6 @@ from caal.integrations import (
     discover_n8n_workflows,
 )
 from caal.llm import ollama_llm_node, ToolDataCache
-from caal.utils.formatting import (
-    format_date_speech_friendly,
-    format_time_speech_friendly,
-)
 from caal import session_registry
 
 # Configure logging (LiveKit CLI reconfigures root logger, so set our level explicitly)
@@ -79,47 +73,42 @@ logging.getLogger("caal").setLevel(logging.INFO)  # Our package - INFO level
 # Configuration
 # =============================================================================
 
-PROMPT_PATH = os.path.join(_script_dir, "prompt", "default.md")
-
-# STT service (Speaches with Faster-Whisper)
+# Infrastructure config (from .env only - URLs, tokens, etc.)
 SPEACHES_URL = os.getenv("SPEACHES_URL", "http://speaches:8000")
 WHISPER_MODEL = os.getenv("WHISPER_MODEL", "Systran/faster-whisper-small")
-
-# TTS service (Kokoro via remsky/kokoro-fastapi)
 KOKORO_URL = os.getenv("KOKORO_URL", "http://kokoro:8880")
-TTS_VOICE = os.getenv("TTS_VOICE", "af_heart")
-
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3:8b")
 OLLAMA_THINK = os.getenv("OLLAMA_THINK", "false").lower() == "true"
-OLLAMA_TEMPERATURE = float(os.getenv("OLLAMA_TEMPERATURE", "0.7"))
-OLLAMA_NUM_CTX = int(os.getenv("OLLAMA_NUM_CTX", "8192"))
-OLLAMA_MAX_TURNS = int(os.getenv("OLLAMA_MAX_TURNS", "20"))
-
-TOOL_CACHE_SIZE = int(os.getenv("TOOL_CACHE_SIZE", "3"))
-
 TIMEZONE_ID = os.getenv("TIMEZONE", "America/Los_Angeles")
 TIMEZONE_DISPLAY = os.getenv("TIMEZONE_DISPLAY", "Pacific Time")
 
+# Import settings module for runtime-configurable values
+from caal import settings as settings_module
 
-# =============================================================================
-# Prompt Loading
-# =============================================================================
+
+def get_runtime_settings() -> dict:
+    """Get runtime-configurable settings.
+
+    These can be changed via the settings UI without rebuilding.
+    Falls back to .env values for backwards compatibility.
+    """
+    settings = settings_module.load_settings()
+
+    return {
+        "tts_voice": settings.get("tts_voice") or os.getenv("TTS_VOICE", "am_puck"),
+        "model": settings.get("model") or os.getenv("OLLAMA_MODEL", "ministral-3:8b"),
+        "temperature": settings.get("temperature", float(os.getenv("OLLAMA_TEMPERATURE", "0.7"))),
+        "num_ctx": settings.get("num_ctx", int(os.getenv("OLLAMA_NUM_CTX", "8192"))),
+        "max_turns": settings.get("max_turns", int(os.getenv("OLLAMA_MAX_TURNS", "20"))),
+        "tool_cache_size": settings.get("tool_cache_size", int(os.getenv("TOOL_CACHE_SIZE", "3"))),
+    }
+
 
 def load_prompt() -> str:
     """Load and populate prompt template with date context."""
-    with open(PROMPT_PATH) as f:
-        template = f.read()
-
-    now = datetime.now(ZoneInfo(TIMEZONE_ID))
-    date_context = (
-        f"Today is {format_date_speech_friendly(now)}. "
-        f"The current time is {format_time_speech_friendly(now)} {TIMEZONE_DISPLAY}."
+    return settings_module.load_prompt_with_context(
+        timezone_id=TIMEZONE_ID,
+        timezone_display=TIMEZONE_DISPLAY,
     )
-
-    prompt = template.replace("{{CURRENT_DATE_CONTEXT}}", date_context)
-    prompt = prompt.replace("{{TIMEZONE}}", TIMEZONE_DISPLAY)
-
-    return prompt
 
 
 # =============================================================================
@@ -224,12 +213,15 @@ async def entrypoint(ctx: agents.JobContext) -> None:
         except Exception as e:
             logger.warning(f"Failed to discover n8n workflows: {e}")
 
+    # Get runtime settings (from settings.json with .env fallback)
+    runtime = get_runtime_settings()
+
     # Create OllamaLLM instance (config lives here, accessed via self.llm in agent)
     ollama_llm = OllamaLLM(
-        model=OLLAMA_MODEL,
+        model=runtime["model"],
         think=OLLAMA_THINK,
-        temperature=OLLAMA_TEMPERATURE,
-        num_ctx=OLLAMA_NUM_CTX,
+        temperature=runtime["temperature"],
+        num_ctx=runtime["num_ctx"],
     )
 
     # Log configuration
@@ -237,8 +229,10 @@ async def entrypoint(ctx: agents.JobContext) -> None:
     logger.info("STARTING VOICE AGENT")
     logger.info("=" * 60)
     logger.info(f"  STT: {SPEACHES_URL} ({WHISPER_MODEL})")
-    logger.info(f"  TTS: {KOKORO_URL} ({TTS_VOICE})")
-    logger.info(f"  LLM: Ollama ({OLLAMA_MODEL}, think={OLLAMA_THINK}, num_ctx={OLLAMA_NUM_CTX})")
+    logger.info(f"  TTS: {KOKORO_URL} ({runtime['tts_voice']})")
+    logger.info(
+        f"  LLM: Ollama ({runtime['model']}, think={OLLAMA_THINK}, num_ctx={runtime['num_ctx']})"
+    )
     logger.info(f"  MCP: {list(mcp_servers.keys()) or 'None'}")
     logger.info("=" * 60)
 
@@ -254,7 +248,7 @@ async def entrypoint(ctx: agents.JobContext) -> None:
             base_url=f"{KOKORO_URL}/v1",
             api_key="not-needed",  # Kokoro doesn't require auth
             model="kokoro",
-            voice=TTS_VOICE,
+            voice=runtime["tts_voice"],
         ),
         vad=silero.VAD.load(),
     )
@@ -312,8 +306,8 @@ async def entrypoint(ctx: agents.JobContext) -> None:
         n8n_workflow_name_map=n8n_workflow_name_map,
         n8n_base_url=n8n_base_url,
         on_tool_status=_publish_tool_status,
-        tool_cache_size=TOOL_CACHE_SIZE,
-        max_turns=OLLAMA_MAX_TURNS,
+        tool_cache_size=runtime["tool_cache_size"],
+        max_turns=runtime["max_turns"],
     )
 
     # Start session
