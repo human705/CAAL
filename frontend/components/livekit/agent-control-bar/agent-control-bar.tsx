@@ -4,6 +4,7 @@ import { type HTMLAttributes, useCallback, useState } from 'react';
 import { Track } from 'livekit-client';
 import { useChat, useRemoteParticipants } from '@livekit/components-react';
 import { ChatTextIcon, PhoneDisconnectIcon } from '@phosphor-icons/react/dist/ssr';
+import { ReloadToolsButton } from '@/components/livekit/agent-control-bar/reload-tools-button';
 import { ToolStatusIndicator } from '@/components/livekit/agent-control-bar/tool-status-indicator';
 import { TrackToggle } from '@/components/livekit/agent-control-bar/track-toggle';
 import { WakeWordToggle } from '@/components/livekit/agent-control-bar/wake-word-toggle';
@@ -160,6 +161,9 @@ export function AgentControlBar({
           >
             <ChatTextIcon weight="bold" />
           </Toggle>
+
+          {/* Reload Tools Button */}
+          <ReloadToolsButton />
 
           {/* Tool Status Indicator - shows if last response used a tool */}
           <ToolStatusIndicator />
